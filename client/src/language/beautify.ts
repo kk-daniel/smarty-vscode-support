@@ -34,7 +34,12 @@ export class BeautifySmarty {
 			//return start + content.replace(smartyRegExp, "/* beautify ignore:start */$1/* beautify ignore:end */") + end;
 			return start + content.replace(smartyRegExp, (match) => {
 				var key = Buffer.from(match).toString('hex');
-				return `SMARTY_CODE_${key}_SMARTY_CODE`;
+				if(start.indexOf("<style") === 0) {
+					return `/*SMARTY_CODE_${key}_SMARTY_CODE*/`;
+				}
+				else {
+					return `SMARTY_CODE_${key}_SMARTY_CODE`;
+				}
 			}) + end;
 		});
 
@@ -44,8 +49,11 @@ export class BeautifySmarty {
 
 		// unescape smarty literals in script and style
 		if (isEscaped) {
-			formatted = formatted.replace(/SMARTY_CODE_([a-zA-Z0-9]+)_SMARTY_CODE/g, (match, key) => {
-				return Buffer.from(key, "hex").toString();
+			formatted = formatted.replace(embeddedRegExp, (match, start, content, end) => {
+				var re: RegExp = start.indexOf("<style") === 0 ? /\/\*SMARTY_CODE_([a-zA-Z0-9]+)_SMARTY_CODE\*\//g : /SMARTY_CODE_([a-zA-Z0-9]+)_SMARTY_CODE/g;
+				return match.replace(re, (match, key) => {
+					return Buffer.from(key, "hex").toString();
+				});
 			});
 		}
 
