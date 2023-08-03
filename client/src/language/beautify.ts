@@ -22,7 +22,7 @@ export class BeautifySmarty {
 
 	public beautify(docText: String, options: FormattingOptions): string {
 		const embeddedRegExp: RegExp = /(<(?:script|style)[\s\S]*?>)([\s\S]*?)(<\/(?:script|style)>)/g;
-		const smartyRegExp: RegExp = /^(?:\t| )*(.*{{?[^}\n\s]}?.*)$/gm;
+		const smartyRegExp: RegExp = /({{?[^}\n\s][^}]+}?)/gm;
 
 		// escape smarty literals in script and style
 		let isEscaped: boolean = false;
@@ -31,12 +31,23 @@ export class BeautifySmarty {
 				return match;
 			}
 			isEscaped = true;
-			return start + content.replace(smartyRegExp, "/* beautify ignore:start */$1/* beautify ignore:end */") + end;
+			//return start + content.replace(smartyRegExp, "/* beautify ignore:start */$1/* beautify ignore:end */") + end;
+			return start + content.replace(smartyRegExp, (match) => {
+				var key = Buffer.from(match).toString('hex');
+				return `SMARTY_CODE_${key}_SMARTY_CODE`;
+			}) + end;
 		});
 
 		// format using js-beautify
 		const beautifyConfig = this.beautifyConfig(options);
 		let formatted = beautify(docText, beautifyConfig);
+
+		// unescape smarty literals in script and style
+		if (isEscaped) {
+			formatted = formatted.replace(/SMARTY_CODE_([a-zA-Z0-9]+)_SMARTY_CODE/g, (match, key) => {
+				return Buffer.from(key, "hex").toString();
+			});
+		}
 
 		// split into lines
 		const literalPattern: string = Object.values(this.literals).map(r => r.source).join("|");
@@ -142,11 +153,6 @@ export class BeautifySmarty {
 		}
 
 		formatted = lines.join("\n").replace(/^[ \t]+$/gm, "");
-
-		// unescape smarty literals in script and style
-		if (isEscaped) {
-			formatted = formatted.replace(/\/\*\s+beautify\s+ignore:(start|end)\s+\*\//g, "");
-		}
 
 		return formatted;
 	}
