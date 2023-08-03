@@ -56,24 +56,40 @@ export class BeautifySmarty {
 		}
 
 		const indent_char = beautifyConfig.indent_with_tabs ? "\t" : " ".repeat(beautifyConfig.indent_size);
-		const region = /{{?(\/?)(\w+).*?}}?/g;
+		const region = /({{?)(\/?)(\w+)/g;
 
 		const startedRegions = [];
+		const openTags = [];
 		let i = 0;
 
 		while (i < lines.length) {
 			let line = lines[i];
 
 			// detect smarty tags
-			let reapeat = startedRegions.length;
+			let repeat = startedRegions.length;
 
 			let startMatch = [];
 			let middleMatch = [];
 			let endMatch = [];
 
+			let lastMatch = 0;
+
+			let openTagsIndent = 0;
+			for(let openTag of openTags) {
+				if(!this.tags.start.has(openTag[3])) {
+					openTagsIndent++;
+				}
+			}
+
 			let match: RegExpExecArray;
 			while (match = region.exec(line)) {
-				let [fullmatch, close, tag] = match;
+				let closeBracketIndex = line.indexOf("}", lastMatch);
+				if(closeBracketIndex > -1 && closeBracketIndex < match.index) {
+					openTags.pop();
+				}
+
+				lastMatch = match.index;
+				let [fullmatch, openBracket, close, tag] = match;
 
 				if (!close && this.tags.start.has(tag)) {
 					startMatch.push(fullmatch, tag);
@@ -82,15 +98,24 @@ export class BeautifySmarty {
 				} else if (close && this.tags.end.has(tag)) {
 					endMatch.push(fullmatch, tag);
 				}
+
+				openTags.push(match);
+			}
+
+			let closeBracketIndex;
+			const beginsWithCloseBracket = openTags.length > 0 && line.replace(/^[ \t]+/, "").charAt(0) == "}";
+			while(openTags.length > 0 && (closeBracketIndex = line.indexOf("}", lastMatch)) > -1) {
+				openTags.pop();
+				lastMatch = closeBracketIndex+1;
 			}
 
 			if (startMatch.length) {
 				startedRegions.push(startMatch[0]);
 			} else if (middleMatch.length) {
-				reapeat--;
+				repeat--;
 			} else if (endMatch.length) {
 				startedRegions.pop();
-				reapeat--;
+				repeat--;
 			}
 
 			// indent smarty block
@@ -104,7 +129,15 @@ export class BeautifySmarty {
 				lines.splice(i, 1, ...newLines);
 			}
 
-			lines[i] = indent_char.repeat(Math.max(0, reapeat)) + lines[i];
+			if(openTags.length > 0) {
+				lines[i] = indent_char.repeat(Math.max(0, repeat+openTagsIndent)) + lines[i].replace(/^[ \t]+/, "");
+			}
+			else if(beginsWithCloseBracket) {
+				lines[i] = indent_char.repeat(Math.max(0, repeat-1+openTagsIndent)) + lines[i].replace(/^[ \t]+/, "");
+			}
+			else {
+				lines[i] = indent_char.repeat(Math.max(0, repeat)) + lines[i];
+			}
 			i += 1;
 		}
 
