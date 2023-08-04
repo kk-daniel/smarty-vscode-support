@@ -23,6 +23,7 @@ export class BeautifySmarty {
 	public beautify(docText: String, options: FormattingOptions): string {
 		const embeddedRegExp: RegExp = /(<(?:script|style)[\s\S]*?>)([\s\S]*?)(<\/(?:script|style)>)/g;
 		const smartyRegExp: RegExp = /({{?[^}\n\s][^}]+}?)/gm;
+		const smartyRegExpStyle: RegExp = /([^ \t\n\r]*{{?[^}\n\s][^}]+}?[^ \t\n\r]*)/gm;
 
 		// escape smarty literals in script and style
 		let isEscaped: boolean = false;
@@ -32,7 +33,7 @@ export class BeautifySmarty {
 			}
 			isEscaped = true;
 			//return start + content.replace(smartyRegExp, "/* beautify ignore:start */$1/* beautify ignore:end */") + end;
-			return start + content.replace(smartyRegExp, (match) => {
+			return start + content.replace(start.indexOf("<style") === 0 ? smartyRegExpStyle : smartyRegExp, (match) => {
 				var key = Buffer.from(match).toString('hex');
 				if(start.indexOf("<style") === 0) {
 					return `/*SMARTY_CODE_${key}_SMARTY_CODE*/`;
