@@ -77,10 +77,12 @@ export class BeautifySmarty {
 
 		const indent_char = beautifyConfig.indent_with_tabs ? "\t" : " ".repeat(beautifyConfig.indent_size);
 		const region = /({{?)(\/?)(\w+)/g;
+		const preTagMatch = /<\/?pre[^>]*>/g;
 
 		const startedRegions = [];
 		const openTags = [];
 		let i = 0;
+		let preTag = false;
 
 		while (i < lines.length) {
 			let line = lines[i];
@@ -155,9 +157,19 @@ export class BeautifySmarty {
 			else if(beginsWithCloseBracket) {
 				lines[i] = indent_char.repeat(Math.max(0, repeat-1+openTagsIndent)) + lines[i].replace(/^[ \t]+/, "");
 			}
-			else {
+			else if(!preTag) {
 				lines[i] = indent_char.repeat(Math.max(0, repeat)) + lines[i];
 			}
+
+			while(match = preTagMatch.exec(lines[i])) {
+				if(match[0].indexOf("</") === 0) {
+					preTag = false;
+				}
+				else {
+					preTag = true;
+				}
+			}
+
 			i += 1;
 		}
 
