@@ -7,7 +7,7 @@ const beautify = require("../js-beautify").html;
 export class BeautifySmarty {
 
 	private literals: FormattingLiterals = {
-		strings: /"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`/,
+		strings: /"(?:\\.|[^"\\{]|\\[^"]|\\"|{[ \n\t]|{[^}]*})*"|'(?:\\.|[^'\\{]|\\[^']|\\'|{[ \n\t]|{[^}]*})*'|`(?:\\.|[^`\\])*`/m,
 		smartyComment: /{\*[\s\S]*?\*}/,
 		htmlComment: /<!--[\s\S]*?-->/,
 		cssComment: /\/\*[\s\S]*?\*\//,
@@ -82,7 +82,7 @@ export class BeautifySmarty {
 		}
 
 		const indent_char = beautifyConfig.indent_with_tabs ? "\t" : " ".repeat(beautifyConfig.indent_size);
-		const region = /({{?)(\/?)(\w+)/g;
+		const region = /({{?)(\/?)(\w+|\*)/g;
 		const preTagMatch = /<\/?pre[^>]*>/g;
 
 		const startedRegions = [];
@@ -103,17 +103,35 @@ export class BeautifySmarty {
 			let lastMatch = 0;
 
 			let openTagsIndent = 0;
+			let comment = false;
 			for(let openTag of openTags) {
+				if(openTag[3] === "*") {
+					comment = true;
+				}
 				if(!this.tags.start.has(openTag[3])) {
 					openTagsIndent++;
 				}
 			}
 
+			let commentEndIndex = line.indexOf("*}");
+
 			let match: RegExpExecArray;
 			while (match = region.exec(line)) {
-				let closeBracketIndex = line.indexOf("}", lastMatch);
-				if(closeBracketIndex > -1 && closeBracketIndex < match.index) {
-					openTags.pop();
+				if(comment) {
+					if(commentEndIndex > -1 && commentEndIndex < match.index) {
+						comment = false;
+						openTags.pop();
+						lastMatch = commentEndIndex+2;
+					}
+					else {
+						continue;
+					}
+				}
+				else {
+					let closeBracketIndex = line.indexOf("}", lastMatch);
+					if(closeBracketIndex > -1 && closeBracketIndex < match.index) {
+						openTags.pop();
+					}
 				}
 
 				lastMatch = match.index;
@@ -128,10 +146,19 @@ export class BeautifySmarty {
 				}
 
 				openTags.push(match);
+				if(tag === "*") {
+					comment = true;
+				}
+			}
+
+			if(comment && commentEndIndex > -1) {
+				comment = false;
+				openTags.pop();
+				lastMatch = commentEndIndex+2;
 			}
 
 			let closeBracketIndex;
-			const beginsWithCloseBracket = openTags.length > 0 && line.replace(/^[ \t]+/, "").charAt(0) == "}";
+			const beginsWithCloseBracket = openTags.length > 0 && line.replace(/^[ \t]+/, "").charAt(0) == "}" && openTags[openTags.length-1].input !== line;
 			while(openTags.length > 0 && (closeBracketIndex = line.indexOf("}", lastMatch)) > -1) {
 				openTags.pop();
 				lastMatch = closeBracketIndex+1;
@@ -158,12 +185,12 @@ export class BeautifySmarty {
 					if(/^{\/?t/.exec(match)) {
 						return match;
 					}
-					return iter++ ? "\n" + spaces : "" + match;
+					return (iter++ ? "\n" + spaces : "") + match;
 				}).split("\n");
 				lines.splice(i, 1, ...newLines);
 			}
 
-			if(openTags.length > 0) {
+			if(openTags.length > 0 || (openTagsIndent > 0 && !beginsWithCloseBracket)) {
 				lines[i] = indent_char.repeat(Math.max(0, repeat+openTagsIndent)) + lines[i].replace(/^[ \t]+/, "");
 			}
 			else if(beginsWithCloseBracket) {
